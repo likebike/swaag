@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+
+
+# TODO:
+# 1) The Intensity/Contrast detection is currently very unstable.  I need to reduce an image down to 12.5% intensity before I notice a difference in the outputs.
+# 2) It would be nice to have a --width argument, which would auto-scale the input image.  Right now, if you use an offset, it will increase the output dimensions by 1 cell, which is sometimes unexpected and undesirable.
+# 3) It would be nice to be able to use Ctrl-C to terminate the process once it is running.  Right now, it does not die, and ends up in a weird limbo state.
+# 4) 'pr' version 8.13 on Ubuntu 12.04 messes up the column alignment.  'pr' version 8.4 on WebFaction gets it right.
+
+VERSION='0.1-20130922a'
+
+import os, argparse, subprocess, glob, re, shutil, multiprocessing
+
+__abs_file__ = os.path.abspath(__file__)
+__abs_dir__ = os.path.dirname(__abs_file__)
+
+def setup_renders(renders_dir, charmap_path, screenshot_path, invert):
+    swaag_mark = os.path.join(renders_dir, '.swaag')
+    if os.path.exists(renders_dir):
+        assert os.path.exists(swaag_mark)
+        shutil.rmtree(renders_dir)
+    os.makedirs(renders_dir)
+    f = open(swaag_mark, 'w'); f.close()
+    command = 'cd %r && QUIET=1 %r %r %r'%(renders_dir,
+                                           os.path.join(__abs_dir__, 'charmap2pngs.py'),
+                                           charmap_path,
+                                           screenshot_path)
+    subprocess.check_call(command, shell=True) 
+
+    command = 'cd %r && INVERT=%d %r *.png'%(renders_dir,
+                                             invert,
+                                             os.path.join(__abs_dir__, 'centerOfInk.py'))
+    subprocess.check_call(command, shell=True) 
+
+def process(out_path, box_size, offset, image_path, renders_dir, intensity_weight):
+    out_f = open(out_path, 'w')
+    command = '%r %dx%d %d,%d %r %r %f'%(os.path.join(__abs_dir__, 'png2ascii.py'),
+                                         box_size[0], box_size[1],
+                                         offset[0], offset[1],
+                                         image_path,
+                                         renders_dir,
+                                         intensity_weight)
+    subprocess.check_call(command, shell=True, stdout=out_f)
+    out_f.close()
+
+def main(image_path, renders_dir, charmap_path, screenshot_path, box_size, intensity_weight, invert, concurrency):
+    setup_renders(renders_dir, charmap_path, screenshot_path, invert)
+
+    pool = multiprocessing.Pool(processes=concurrency)
+    for y in range(box_size[1]):
+        for x in range(box_size[0]):
+            out_path = '%02d,%02d.txt'%(x,y)
+            if os.path.exists(out_path): continue
+            pool.apply_async(process, (out_path, box_size, (x,y), image_path, renders_dir, intensity_weight))
+    pool.close()
+    pool.join()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='SWAAG')
+    parser.add_argument('--renders_dir', type=str, default='renders', help='path to renders dir')
+    parser.add_argument('-j', metavar='CONCURRENCY', type=int, default=1, help='concurrency level')
+    parser.add_argument('-w', metavar='INTENSITY_WEIGHT', type=float, default=0.5, help='intensity weight')
+    parser.add_argument('-i', metavar='INVERT', type=int, default=1, help='inversion flag')
+    parser.add_argument('-m', metavar='CHARMAP', type=str, default='ascii', help='name of charmap')
+    parser.add_argument('-s', metavar='SCREENSHOT', type=str, default='xfce4-term-LiberationMono-10', help='name of screen capture of charmap')
+    parser.add_argument('image_path', type=str, help='the input image')
+    args = parser.parse_args()
+
+    if args.j <= 0: raise ValueError('Concurrency must be > 0')
+    if os.path.isfile(args.renders_dir): raise ValueError('renders_dir is a file!')
+    charmap_path = os.path.join(__abs_dir__, 'charmaps', args.m, 'charmap.txt')
+    if not os.path.isfile(charmap_path): raise ValueError('Invalid charmap: %s'%(charmap_path,))
+    screenshot_path = glob.glob(os.path.join(os.path.dirname(charmap_path), '%s_*.png'%(args.s,)))
+    assert len(screenshot_path) == 1
+    screenshot_path = screenshot_path[0]
+    box_size = re.match('^.+/%s_(.+)\.png$'%(args.s,), screenshot_path).group(1)
+    box_size = [int(x) for x in box_size.split('x')]
+    
+    main(image_path=args.image_path, renders_dir=args.renders_dir, charmap_path=charmap_path, screenshot_path=screenshot_path, box_size=box_size, intensity_weight=args.w, invert=args.i, concurrency=args.j)
+
+    print('Done. You can view the outputs in a grid with a command like this:')
+    print("for y in {00..%02d}; do pr -T -m -i' 1' --width=100 *,$y.txt; echo; done"%(box_size[1]-1,))
+    print('Once you find the best vertical columns, isolate them (03,04 below):')
+    print("for x in 03 04; do pr -T -m -i' 1' --width=180 $x,*.txt; echo; done")
+
