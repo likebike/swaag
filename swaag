@@ -7,7 +7,7 @@
 # 3) It would be nice to be able to use Ctrl-C to terminate the process once it is running.  Right now, it does not die, and ends up in a weird limbo state.
 # 4) 'pr' version 8.13 on Ubuntu 12.04 messes up the column alignment.  'pr' version 8.4 on WebFaction gets it right.
 
-
+VERSION='0.1-20130922a'
 
 import os, argparse, subprocess, glob, re, shutil, multiprocessing
 
