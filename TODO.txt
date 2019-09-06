@@ -1,5 +1,5 @@
 
-* Pixel-by-pixel recognition is not good enough. We need to do a recursive bisection, starting off with the character -- find COM and intensity of the whole thing. Then split into 4 pieces, and calculate this as well, and continue until we reach a single pizel. Store them all. 
+* Pixel-by-pixel recognition is not good enough. We need to do a recursive bisection, starting off with the character -- find COM and intensity of the whole thing. Then split into 4 pieces, and calculate this as well, and continue until we reach a single pixel. Store them all.
 
 
 * Figure out why extended Ascii chars look worse than normal... this shouldn't be!
@@ -16,8 +16,5 @@
 * Be able to set the desired width
 
 
-
-
-
-
 * Eliminate rendering completely. Instead, provide a text file of every unicode character that has ever existed, and then take thousands of screenshots in order to capture them all, crop them perfectly, manually, and then provide this as input to the program for analysis.
+
